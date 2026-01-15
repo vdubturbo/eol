@@ -1,0 +1,42 @@
+import 'dotenv/config';
+import express from 'express';
+import cors from 'cors';
+import searchRoutes from './routes/search';
+import componentsRoutes from './routes/components';
+import adminRoutes from './routes/admin';
+import ingestionRoutes from './routes/ingestion';
+
+const app = express();
+const PORT = process.env.PORT || 3001;
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+
+// Health check
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// API routes
+app.use('/api/search', searchRoutes);
+app.use('/api/components', componentsRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/ingestion', ingestionRoutes);
+
+// Error handling
+app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('Unhandled error:', err);
+  res.status(500).json({
+    error: 'Internal server error',
+    message: process.env.NODE_ENV === 'development' ? err.message : undefined
+  });
+});
+
+// Start server
+app.listen(PORT, () => {
+  console.log(`ComponentDB server running on port ${PORT}`);
+  console.log(`Health check: http://localhost:${PORT}/health`);
+});
+
+export default app;

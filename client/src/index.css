@@ -1,0 +1,191 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Base styles */
+:root {
+  --bg-primary: #0a0e17;
+  --bg-secondary: #111827;
+  --bg-tertiary: #1f2937;
+  --accent-primary: #10b981;
+  --accent-secondary: #06b6d4;
+  --accent-warning: #f59e0b;
+  --accent-danger: #ef4444;
+  --border-color: #374151;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background-color: var(--bg-primary);
+  color: #f9fafb;
+  min-height: 100vh;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4b5563;
+}
+
+/* Custom utilities */
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* LED indicator animations */
+  .led-pulse {
+    animation: led-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes led-pulse {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.5;
+    }
+  }
+
+  /* Glow effect on hover */
+  .hover-glow:hover {
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+  }
+
+  /* PCB grid background */
+  .bg-pcb-grid {
+    background-image:
+      linear-gradient(rgba(16, 185, 129, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(16, 185, 129, 0.03) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+}
+
+/* Component styles */
+@layer components {
+  /* Card styles */
+  .card {
+    @apply bg-bg-secondary border border-gray-700 rounded-lg p-4;
+  }
+
+  .card-hover {
+    @apply card hover:border-accent-primary hover:shadow-glow-green transition-all duration-200;
+  }
+
+  /* Button styles */
+  .btn {
+    @apply px-4 py-2 rounded-md font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-primary {
+    @apply btn bg-accent-primary text-white hover:bg-emerald-600 hover:shadow-glow-green;
+  }
+
+  .btn-secondary {
+    @apply btn bg-bg-tertiary text-gray-200 border border-gray-600 hover:border-accent-secondary hover:text-accent-secondary;
+  }
+
+  .btn-ghost {
+    @apply btn text-gray-400 hover:text-white hover:bg-bg-tertiary;
+  }
+
+  .btn-danger {
+    @apply btn bg-accent-danger text-white hover:bg-red-600;
+  }
+
+  /* Input styles */
+  .input {
+    @apply w-full px-4 py-2 bg-bg-tertiary border border-gray-600 rounded-md text-white placeholder-gray-500 focus:outline-none focus:border-accent-primary focus:ring-1 focus:ring-accent-primary;
+  }
+
+  .input-search {
+    @apply input pl-10;
+  }
+
+  /* Select styles */
+  .select {
+    @apply input appearance-none cursor-pointer pr-10 bg-no-repeat bg-right;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%239ca3af'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+    background-size: 1.5rem;
+    background-position: right 0.5rem center;
+  }
+
+  /* Badge styles */
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium;
+  }
+
+  .badge-success {
+    @apply badge bg-emerald-900/50 text-emerald-400 border border-emerald-700;
+  }
+
+  .badge-warning {
+    @apply badge bg-amber-900/50 text-amber-400 border border-amber-700;
+  }
+
+  .badge-danger {
+    @apply badge bg-red-900/50 text-red-400 border border-red-700;
+  }
+
+  .badge-info {
+    @apply badge bg-cyan-900/50 text-cyan-400 border border-cyan-700;
+  }
+
+  /* Table styles */
+  .table {
+    @apply w-full text-sm text-left;
+  }
+
+  .table th {
+    @apply px-4 py-3 bg-bg-tertiary text-gray-400 font-medium uppercase text-xs tracking-wider border-b border-gray-700;
+  }
+
+  .table td {
+    @apply px-4 py-3 border-b border-gray-800;
+  }
+
+  .table tr:hover td {
+    @apply bg-bg-tertiary/50;
+  }
+
+  /* Monospace text for part numbers */
+  .mono {
+    @apply font-mono text-accent-secondary;
+  }
+}
+
+/* Animation for loading states */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton {
+  @apply bg-gradient-to-r from-bg-secondary via-bg-tertiary to-bg-secondary bg-[length:200%_100%];
+  animation: shimmer 1.5s ease-in-out infinite;
+}
