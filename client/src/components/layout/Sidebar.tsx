@@ -2,9 +2,9 @@ import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
   Download,
+  Upload,
   Database,
   BarChart3,
-  Settings,
 } from 'lucide-react';
 
 const navItems = [
@@ -13,6 +13,11 @@ const navItems = [
     icon: LayoutDashboard,
     label: 'Dashboard',
     end: true,
+  },
+  {
+    to: '/admin/import',
+    icon: Upload,
+    label: 'Import Parts',
   },
   {
     to: '/admin/ingestion',

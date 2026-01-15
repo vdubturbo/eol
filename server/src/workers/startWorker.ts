@@ -35,7 +35,9 @@ const worker = new Worker(
     }
   },
   {
-    connection,
+    // Type assertion needed due to ioredis version mismatch between bullmq's bundled version
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    connection: connection as any,
     concurrency: 3,
   }
 );

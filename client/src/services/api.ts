@@ -30,84 +30,30 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
   return response.json();
 }
 
-// Search - uses Supabase directly for read operations
+// Search - uses Express API
 export async function searchComponents(
   filters: SearchFilters,
   page = 1,
   pageSize = 25
 ): Promise<SearchResult> {
-  let query = supabase
-    .from('components')
-    .select(
-      `
-      *,
-      manufacturer:manufacturers(*)
-    `,
-      { count: 'exact' }
-    );
-
-  // Apply filters
-  if (filters.query) {
-    query = query.or(
-      `mpn.ilike.%${filters.query}%,description.ilike.%${filters.query}%`
-    );
-  }
-  if (filters.package) {
-    query = query.eq('package_normalized', filters.package);
-  }
-  if (filters.mounting_style) {
-    query = query.eq('mounting_style', filters.mounting_style);
-  }
-  if (filters.pin_count) {
-    query = query.eq('pin_count', filters.pin_count);
-  }
+  const params = new URLSearchParams();
+  if (filters.query) params.set('query', filters.query);
+  if (filters.package) params.set('package', filters.package);
+  if (filters.mounting_style) params.set('mounting_style', filters.mounting_style);
+  if (filters.pin_count) params.set('pin_count', String(filters.pin_count));
   if (filters.lifecycle_status?.length) {
-    query = query.in('lifecycle_status', filters.lifecycle_status);
+    params.set('lifecycle_status', filters.lifecycle_status.join(','));
   }
-  if (filters.vin_max) {
-    query = query.gte('specs->vin_max', filters.vin_max);
-  }
-  if (filters.iout_min) {
-    query = query.gte('specs->iout_max', filters.iout_min);
-  }
-  if (filters.manufacturer_id) {
-    query = query.eq('manufacturer_id', filters.manufacturer_id);
-  }
+  if (filters.manufacturer_id) params.set('manufacturer_id', filters.manufacturer_id);
+  params.set('page', String(page));
+  params.set('page_size', String(pageSize));
 
-  // Pagination
-  const from = (page - 1) * pageSize;
-  const to = from + pageSize - 1;
-  query = query.range(from, to).order('mpn');
-
-  const { data, error, count } = await query;
-
-  if (error) throw error;
-
-  return {
-    components: (data as ComponentWithManufacturer[]) || [],
-    total: count || 0,
-    page,
-    page_size: pageSize,
-  };
+  return fetchAPI<SearchResult>(`/components?${params.toString()}`);
 }
 
 // Get single component with all details
 export async function getComponent(id: string): Promise<ComponentWithDetails> {
-  const { data, error } = await supabase
-    .from('components')
-    .select(
-      `
-      *,
-      manufacturer:manufacturers(*),
-      pinouts(*),
-      dimensions:package_dimensions(*)
-    `
-    )
-    .eq('id', id)
-    .single();
-
-  if (error) throw error;
-  return data as ComponentWithDetails;
+  return fetchAPI<ComponentWithDetails>(`/components/${id}`);
 }
 
 // Find drop-in replacements - uses backend for complex logic

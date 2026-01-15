@@ -25,7 +25,9 @@ function getConnection(): Redis {
 function getQueue(): Queue {
   if (!queue) {
     const conn = getConnection();
-    queue = new Queue('ingestion', { connection: conn });
+    // Type assertion needed due to ioredis version mismatch between bullmq's bundled version
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    queue = new Queue('ingestion', { connection: conn as any });
   }
 
   return queue;

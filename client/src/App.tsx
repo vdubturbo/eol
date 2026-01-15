@@ -6,6 +6,7 @@ import ReplacementsPage from './pages/ReplacementsPage';
 import ComparePage from './pages/ComparePage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
 import AdminIngestionPage from './pages/AdminIngestionPage';
+import AdminImportPage from './pages/AdminImportPage';
 import AdminDataPage from './pages/AdminDataPage';
 import AdminApiUsagePage from './pages/AdminApiUsagePage';
 
@@ -22,6 +23,7 @@ function App() {
         {/* Admin routes */}
         <Route path="/admin" element={<AdminDashboardPage />} />
         <Route path="/admin/ingestion" element={<AdminIngestionPage />} />
+        <Route path="/admin/import" element={<AdminImportPage />} />
         <Route path="/admin/data" element={<AdminDataPage />} />
         <Route path="/admin/api-usage" element={<AdminApiUsagePage />} />
       </Routes>

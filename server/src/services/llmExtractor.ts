@@ -1,18 +1,18 @@
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import { trackApiUsage } from '../db/queries';
 import type { ExtractedPinout, ExtractedSpecs, PinFunction } from '../types';
 
-let anthropic: Anthropic | null = null;
+let openai: OpenAI | null = null;
 
-function getClient(): Anthropic {
-  if (!anthropic) {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+function getClient(): OpenAI {
+  if (!openai) {
+    const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
-      throw new Error('ANTHROPIC_API_KEY not configured');
+      throw new Error('OPENAI_API_KEY not configured');
     }
-    anthropic = new Anthropic({ apiKey });
+    openai = new OpenAI({ apiKey });
   }
-  return anthropic;
+  return openai;
 }
 
 const PINOUT_EXTRACTION_PROMPT = `You are an expert at extracting pinout information from electronic component datasheets.
@@ -45,10 +45,7 @@ Respond with valid JSON only, no explanation. Format:
     {"pin_number": 1, "pin_name": "BOOT", "pin_function": "BOOTSTRAP", "confidence": 0.95},
     ...
   ]
-}
-
-Datasheet text:
-`;
+}`;
 
 const SPECS_EXTRACTION_PROMPT = `You are an expert at extracting electrical specifications from electronic component datasheets.
 
@@ -75,10 +72,7 @@ Format:
     ...
   },
   "confidence": 0.9
-}
-
-Datasheet text:
-`;
+}`;
 
 export async function extractPinoutsWithLLM(
   datasheetText: string
@@ -91,35 +85,40 @@ export async function extractPinoutsWithLLM(
     ? datasheetText.substring(0, maxLength) + '\n...[truncated]'
     : datasheetText;
 
-  const response = await client.messages.create({
-    model: 'claude-3-haiku-20240307',
+  const response = await client.chat.completions.create({
+    model: 'gpt-4o-mini',
     max_tokens: 2000,
     messages: [
       {
+        role: 'system',
+        content: PINOUT_EXTRACTION_PROMPT
+      },
+      {
         role: 'user',
-        content: PINOUT_EXTRACTION_PROMPT + truncatedText
+        content: `Datasheet text:\n${truncatedText}`
       }
-    ]
+    ],
+    response_format: { type: 'json_object' }
   });
 
   // Track usage
-  await trackApiUsage('anthropic', {
-    endpoint: 'messages',
-    tokens_used: (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0),
-    estimated_cost: calculateAnthropicCost(response.usage)
+  await trackApiUsage('openai', {
+    endpoint: 'chat/completions',
+    tokens_used: (response.usage?.prompt_tokens || 0) + (response.usage?.completion_tokens || 0),
+    estimated_cost: calculateOpenAICost(response.usage)
   });
 
   // Parse response
-  const content = response.content[0];
-  if (content.type !== 'text') {
-    throw new Error('Unexpected response type');
+  const content = response.choices[0]?.message?.content;
+  if (!content) {
+    throw new Error('No response content');
   }
 
   try {
-    const parsed = JSON.parse(content.text);
+    const parsed = JSON.parse(content);
     return parsed.pinouts || [];
   } catch {
-    console.error('Failed to parse LLM response:', content.text);
+    console.error('Failed to parse LLM response:', content);
     return [];
   }
 }
@@ -135,46 +134,51 @@ export async function extractSpecsWithLLM(
     ? datasheetText.substring(0, maxLength) + '\n...[truncated]'
     : datasheetText;
 
-  const response = await client.messages.create({
-    model: 'claude-3-haiku-20240307',
+  const response = await client.chat.completions.create({
+    model: 'gpt-4o-mini',
     max_tokens: 1000,
     messages: [
       {
+        role: 'system',
+        content: SPECS_EXTRACTION_PROMPT
+      },
+      {
         role: 'user',
-        content: SPECS_EXTRACTION_PROMPT + truncatedText
+        content: `Datasheet text:\n${truncatedText}`
       }
-    ]
+    ],
+    response_format: { type: 'json_object' }
   });
 
-  await trackApiUsage('anthropic', {
-    endpoint: 'messages',
-    tokens_used: (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0),
-    estimated_cost: calculateAnthropicCost(response.usage)
+  await trackApiUsage('openai', {
+    endpoint: 'chat/completions',
+    tokens_used: (response.usage?.prompt_tokens || 0) + (response.usage?.completion_tokens || 0),
+    estimated_cost: calculateOpenAICost(response.usage)
   });
 
-  const content = response.content[0];
-  if (content.type !== 'text') {
-    throw new Error('Unexpected response type');
+  const content = response.choices[0]?.message?.content;
+  if (!content) {
+    throw new Error('No response content');
   }
 
   try {
-    const parsed = JSON.parse(content.text);
+    const parsed = JSON.parse(content);
     return parsed.specs || {};
   } catch {
-    console.error('Failed to parse LLM response:', content.text);
+    console.error('Failed to parse LLM response:', content);
     return {};
   }
 }
 
-function calculateAnthropicCost(usage?: { input_tokens?: number; output_tokens?: number }): number {
+function calculateOpenAICost(usage?: { prompt_tokens?: number; completion_tokens?: number }): number {
   if (!usage) return 0;
 
-  // Claude 3 Haiku pricing (as of 2024)
-  const inputCostPer1k = 0.00025;
-  const outputCostPer1k = 0.00125;
+  // GPT-4o-mini pricing (as of 2024)
+  const inputCostPer1k = 0.00015;
+  const outputCostPer1k = 0.0006;
 
-  const inputCost = ((usage.input_tokens || 0) / 1000) * inputCostPer1k;
-  const outputCost = ((usage.output_tokens || 0) / 1000) * outputCostPer1k;
+  const inputCost = ((usage.prompt_tokens || 0) / 1000) * inputCostPer1k;
+  const outputCost = ((usage.completion_tokens || 0) / 1000) * outputCostPer1k;
 
   return inputCost + outputCost;
 }

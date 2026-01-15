@@ -6,6 +6,8 @@ export function useSearchComponents(filters: SearchFilters, page: number, pageSi
   return useQuery({
     queryKey: ['components', 'search', filters, page, pageSize],
     queryFn: () => api.searchComponents(filters, page, pageSize),
+    refetchOnMount: 'always',
+    staleTime: 0,
   });
 }
 

@@ -206,14 +206,15 @@ export async function getJobById(id: string) {
 export async function getDashboardStats() {
   const [
     { count: totalComponents },
-    { count: withPinouts },
+    componentsWithPinoutsResult,
     { count: pendingJobs },
     apiUsage
   ] = await Promise.all([
     supabaseAdmin.from('components').select('*', { count: 'exact', head: true }),
+    // Get distinct component_ids that have pinouts
     supabaseAdmin
       .from('pinouts')
-      .select('component_id', { count: 'exact', head: true }),
+      .select('component_id'),
     supabaseAdmin
       .from('ingestion_jobs')
       .select('*', { count: 'exact', head: true })
@@ -224,14 +225,20 @@ export async function getDashboardStats() {
       .gte('created_at', new Date(new Date().setDate(1)).toISOString())
   ]);
 
+  // Count unique component_ids with pinouts
+  const uniqueComponentIds = new Set(
+    componentsWithPinoutsResult.data?.map(p => p.component_id) || []
+  );
+  const withPinouts = uniqueComponentIds.size;
+
   const mtdCost = apiUsage.data?.reduce((sum, r) => sum + (r.estimated_cost || 0), 0) || 0;
-  const successRate = totalComponents && withPinouts
-    ? ((withPinouts || 0) / (totalComponents || 1)) * 100
+  const successRate = totalComponents
+    ? (withPinouts / totalComponents) * 100
     : 0;
 
   return {
     total_components: totalComponents || 0,
-    components_with_pinouts: withPinouts || 0,
+    components_with_pinouts: withPinouts,
     extraction_success_rate: Math.round(successRate * 10) / 10,
     pending_jobs: pendingJobs || 0,
     mtd_api_cost: Math.round(mtdCost * 100) / 100

@@ -100,7 +100,16 @@ export async function getPartByMpn(mpn: string): Promise<DigiKeyPart | null> {
   }
 
   const data = await response.json();
+
+  // DigiKey API v4 returns Products array
   const part = data.Products?.[0] || null;
+
+  // Debug: log the raw response structure
+  if (part) {
+    console.log('[DigiKey] Raw part keys:', Object.keys(part));
+    console.log('[DigiKey] MPN field:', part.ManufacturerPartNumber || part.ManufacturerProductNumber || part.PartNumber);
+    console.log('[DigiKey] ProductStatus:', part.ProductStatus);
+  }
 
   await trackApiUsage('digikey', {
     endpoint: 'search/keyword',
@@ -111,7 +120,7 @@ export async function getPartByMpn(mpn: string): Promise<DigiKeyPart | null> {
   return part;
 }
 
-export function normalizeDigiKeyPart(part: DigiKeyPart) {
+export function normalizeDigiKeyPart(part: DigiKeyPart & Record<string, unknown>) {
   const specs: Record<string, unknown> = {};
 
   for (const param of part.Parameters || []) {
@@ -120,12 +129,39 @@ export function normalizeDigiKeyPart(part: DigiKeyPart) {
     specs[name] = value;
   }
 
+  // DigiKey API v4 may use different field names
+  const mpn = part.ManufacturerPartNumber
+    || (part.ManufacturerProductNumber as string)
+    || (part.PartNumber as string)
+    || (part.ProductVariations?.[0]?.ManufacturerPartNumber as string);
+
+  const manufacturer = part.Manufacturer?.Name
+    || (part.Manufacturer as unknown as string)
+    || 'Unknown';
+
+  // Description can be a string or an object with ProductDescription/DetailedDescription
+  let description = '';
+  if (typeof part.Description === 'string') {
+    description = part.Description;
+  } else if (part.Description && typeof part.Description === 'object') {
+    const desc = part.Description as { ProductDescription?: string; DetailedDescription?: string };
+    description = desc.ProductDescription || desc.DetailedDescription || '';
+  } else if (part.ProductDescription) {
+    description = part.ProductDescription;
+  } else if (part.DetailedDescription) {
+    description = part.DetailedDescription as string;
+  }
+
+  const datasheet = part.PrimaryDatasheet
+    || (part.DatasheetUrl as string)
+    || (part.PrimaryDatasheetUrl as string);
+
   return {
-    mpn: part.ManufacturerPartNumber,
-    manufacturer: part.Manufacturer.Name,
-    description: part.ProductDescription,
-    datasheet_url: part.PrimaryDatasheet,
-    lifecycle_status: mapLifecycleStatus(part.ProductStatus),
+    mpn,
+    manufacturer,
+    description,
+    datasheet_url: datasheet,
+    lifecycle_status: mapLifecycleStatus(part.ProductStatus || '', part),
     specs
   };
 }
@@ -141,12 +177,41 @@ function parseSpecValue(value: string): number | string {
   return value;
 }
 
-function mapLifecycleStatus(status: string): string {
+function mapLifecycleStatus(status: unknown, part?: Record<string, unknown>): string {
+  // First check explicit flags if part is provided
+  if (part) {
+    if (part.EndOfLife === true) return 'Obsolete';
+    if (part.Discontinued === true) return 'Obsolete';
+  }
+
+  if (!status) return 'Active'; // Default to Active for DigiKey parts in stock
+
+  // Handle status as object (DigiKey v4 returns { Status: "Active", ... })
+  let statusStr = '';
+  if (typeof status === 'string') {
+    statusStr = status;
+  } else if (typeof status === 'object' && status !== null) {
+    const statusObj = status as Record<string, unknown>;
+    statusStr = (statusObj.Status as string) || (statusObj.status as string) || '';
+  }
+
+  if (!statusStr) return 'Active';
+
+  const statusLower = statusStr.toLowerCase();
+
+  // Map various status strings
+  if (statusLower.includes('active') || statusLower.includes('in stock')) return 'Active';
+  if (statusLower.includes('obsolete') || statusLower.includes('end of life')) return 'Obsolete';
+  if (statusLower.includes('nrnd') || statusLower.includes('not recommended') ||
+      statusLower.includes('last time buy') || statusLower.includes('not for new')) return 'NRND';
+
   const statusMap: Record<string, string> = {
     'Active': 'Active',
     'Obsolete': 'Obsolete',
     'Not For New Designs': 'NRND',
     'Last Time Buy': 'NRND',
+    'Discontinued': 'Obsolete',
   };
+
   return statusMap[status] || 'Unknown';
 }
