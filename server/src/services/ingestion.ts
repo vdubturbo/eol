@@ -1,9 +1,35 @@
+import { supabaseAdmin } from '../db/supabase';
 import { getPartByMpn as getNexarPart, normalizeNexarPart } from './nexar';
-import { getPartByMpn as getDigiKeyPart, normalizeDigiKeyPart } from './digikey';
+import { getPartByMpn as getDigiKeyPart, normalizeDigiKeyPart, searchParts as searchDigiKeyParts } from './digikey';
 import { extractFromUrl } from './pdfExtractor';
 import { extractPinoutsWithLLM, extractSpecsWithLLM, mapToPinFunction } from './llmExtractor';
 import { upsertComponent, upsertPinouts, getOrCreateManufacturer } from '../db/queries';
 import type { ExtractedPinout, DataSource, LifecycleStatus } from '../types';
+
+// Helper to extract error message from various error types
+function getErrorMessage(err: unknown): string {
+  if (err instanceof Error) {
+    return err.message;
+  }
+  if (typeof err === 'object' && err !== null) {
+    const errObj = err as Record<string, unknown>;
+    // Supabase errors have message, code, details properties
+    if (errObj.message) {
+      const parts = [errObj.message as string];
+      if (errObj.code) parts.push(`(code: ${errObj.code})`);
+      if (errObj.details) parts.push(`- ${errObj.details}`);
+      return parts.join(' ');
+    }
+    // Try to stringify if has toString
+    if (errObj.toString && errObj.toString !== Object.prototype.toString) {
+      return errObj.toString();
+    }
+  }
+  if (typeof err === 'string') {
+    return err;
+  }
+  return 'Unknown error';
+}
 
 export interface ImportResult {
   success: boolean;
@@ -16,7 +42,20 @@ export interface ImportResult {
 
 export interface ImportOptions {
   extractPinouts?: boolean;
+  skipExisting?: boolean;
   sources?: ('nexar' | 'digikey')[];
+}
+
+// Check if a part already exists in the database (case-insensitive)
+async function checkPartExists(mpn: string): Promise<boolean> {
+  const { data } = await supabaseAdmin
+    .from('components')
+    .select('id')
+    .ilike('mpn', mpn)
+    .limit(1)
+    .single();
+  
+  return !!data;
 }
 
 export async function importPartByMpn(
@@ -25,6 +64,7 @@ export async function importPartByMpn(
 ): Promise<ImportResult> {
   const {
     extractPinouts = true,
+    skipExisting = true,
     sources = ['nexar', 'digikey']
   } = options;
 
@@ -36,6 +76,17 @@ export async function importPartByMpn(
   };
 
   try {
+    // Check if part already exists
+    if (skipExisting) {
+      const exists = await checkPartExists(mpn);
+      if (exists) {
+        console.log(`[Ingestion] Skipping ${mpn} - already exists`);
+        result.success = true;
+        result.error = 'Skipped - already exists';
+        return result;
+      }
+    }
+
     console.log(`[Ingestion] Starting import for MPN: ${mpn}`);
 
     // Step 1: Lookup part from API sources
@@ -45,6 +96,8 @@ export async function importPartByMpn(
       description: string;
       datasheet_url?: string;
       lifecycle_status?: string;
+      package_raw?: string;
+      package_normalized?: string;
       specs: Record<string, unknown>;
     } | null = null;
 
@@ -117,12 +170,15 @@ export async function importPartByMpn(
 
     // Step 5: Save component to database
     console.log(`[Ingestion] Saving component to database...`);
+    console.log(`[Ingestion] Package: raw="${partData.package_raw}" normalized="${partData.package_normalized}"`);
     const component = await upsertComponent({
       mpn: partData.mpn,
       manufacturer_id: manufacturer.id,
       description: partData.description,
       datasheet_url: partData.datasheet_url,
       lifecycle_status: (partData.lifecycle_status || 'Unknown') as LifecycleStatus,
+      package_raw: partData.package_raw,
+      package_normalized: partData.package_normalized,
       specs: partData.specs,
       pin_count: pinCount,
       data_sources: result.dataSources as DataSource[],
@@ -152,7 +208,7 @@ export async function importPartByMpn(
 
     return result;
   } catch (err) {
-    result.error = err instanceof Error ? err.message : 'Unknown error';
+    result.error = getErrorMessage(err);
     console.error(`[Ingestion] Import failed for ${mpn}:`, err);
     return result;
   }
@@ -175,6 +231,18 @@ export async function importPartsBatch(
   return results;
 }
 
+// Check if a component already exists by MPN (case-insensitive)
+async function componentExistsByMpn(mpn: string): Promise<boolean> {
+  const { data } = await supabaseAdmin
+    .from('components')
+    .select('id')
+    .ilike('mpn', mpn)
+    .limit(1)
+    .single();
+  
+  return !!data;
+}
+
 function calculateConfidence(dataSources: string[], pinoutCount: number): number {
   let score = 0.5; // Base score
 
@@ -188,4 +256,118 @@ function calculateConfidence(dataSources: string[], pinoutCount: number): number
   }
 
   return Math.min(score, 1.0);
+}
+
+// Part Family Import
+export interface PartFamilyResult {
+  baseMpn: string;
+  variantsFound: number;
+  imported: number;
+  skipped: number;
+  errors: string[];
+  variants: string[];
+}
+
+export async function importPartFamily(
+  baseMpn: string,
+  options: ImportOptions & { skipExisting?: boolean } = {}
+): Promise<PartFamilyResult> {
+  const { skipExisting = true } = options;
+  
+  const result: PartFamilyResult = {
+    baseMpn,
+    variantsFound: 0,
+    imported: 0,
+    skipped: 0,
+    errors: [],
+    variants: []
+  };
+
+  try {
+    console.log(`[Ingestion] Searching for variants of: ${baseMpn}`);
+
+    // Use DigiKey keyword search to find all variants
+    const searchResults = await searchDigiKeyParts(baseMpn, 100);
+
+    if (!searchResults || searchResults.length === 0) {
+      result.errors.push(`No variants found for ${baseMpn}`);
+      return result;
+    }
+
+    // Filter to only MPNs that start with the base part number
+    const variants = searchResults
+      .map(part => {
+        const normalized = normalizeDigiKeyPart(part);
+        return normalized.mpn?.trim();
+      })
+      .filter((mpn): mpn is string => !!mpn && mpn.toUpperCase().startsWith(baseMpn.toUpperCase()));
+
+    // Dedupe (case-insensitive)
+    const seen = new Set<string>();
+    const uniqueVariants: string[] = [];
+    for (const mpn of variants) {
+      const key = mpn.toUpperCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        uniqueVariants.push(mpn);
+      }
+    }
+
+    result.variantsFound = uniqueVariants.length;
+    result.variants = uniqueVariants;
+
+    console.log(`[Ingestion] Found ${uniqueVariants.length} variants for ${baseMpn}`);
+
+    // Track what we've imported in this batch to avoid duplicates
+    const importedInBatch = new Set<string>();
+
+    // Import each variant
+    for (const mpn of uniqueVariants) {
+      // Skip if already imported in this batch
+      if (importedInBatch.has(mpn.toUpperCase())) {
+        console.log(`[Ingestion] Skipping ${mpn} (duplicate in batch)`);
+        continue;
+      }
+
+      try {
+        // Check if already exists
+        if (skipExisting) {
+          const exists = await componentExistsByMpn(mpn);
+          if (exists) {
+            result.skipped++;
+            console.log(`[Ingestion] Skipping ${mpn} (already exists)`);
+            continue;
+          }
+        }
+        
+        const importResult = await importPartByMpn(mpn, { ...options, skipExisting: false }); // Already checked above
+        if (importResult.success) {
+          result.imported++;
+          importedInBatch.add(mpn.toUpperCase());
+        } else {
+          result.errors.push(`${mpn}: ${importResult.error || 'Import failed'}`);
+        }
+      } catch (err) {
+        const errMsg = getErrorMessage(err);
+        // Handle duplicate key errors gracefully
+        if (errMsg.includes('21000') || errMsg.includes('duplicate') || errMsg.includes('second time')) {
+          console.log(`[Ingestion] Skipping ${mpn} (duplicate in transaction)`);
+          result.skipped++;
+        } else {
+          result.errors.push(`${mpn}: ${errMsg}`);
+        }
+      }
+
+      // Delay between imports to avoid rate limiting
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+
+    console.log(`[Ingestion] Family import complete: ${result.imported}/${result.variantsFound} imported`);
+
+    return result;
+  } catch (err) {
+    result.errors.push(getErrorMessage(err));
+    console.error(`[Ingestion] Family import failed for ${baseMpn}:`, err);
+    return result;
+  }
 }

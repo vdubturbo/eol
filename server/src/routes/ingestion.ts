@@ -1,13 +1,13 @@
 import { Router } from 'express';
 import { upsertComponent, upsertPinouts, getOrCreateManufacturer } from '../db/queries';
-import { importPartByMpn, importPartsBatch } from '../services/ingestion';
+import { importPartByMpn, importPartsBatch, importPartFamily } from '../services/ingestion';
 
 const router = Router();
 
 // Import parts from APIs (used by Admin Import UI)
 router.post('/import', async (req, res) => {
   try {
-    const { mpns, source, extractPinouts } = req.body;
+    const { mpns, source, extractPinouts, skipExisting } = req.body;
 
     if (!Array.isArray(mpns) || mpns.length === 0) {
       return res.status(400).json({ message: 'mpns array is required' });
@@ -27,11 +27,13 @@ router.post('/import', async (req, res) => {
 
     const results = await importPartsBatch(mpns, {
       extractPinouts: extractPinouts ?? false,
+      skipExisting: skipExisting ?? true,
       sources
     });
 
     // Calculate stats for frontend
     const added = results.filter(r => r.success && r.componentId).length;
+    const skipped = results.filter(r => r.success && !r.componentId && r.error?.includes('Skipped')).length;
     const updated = 0; // Would need to track this in the service
     const pinouts = results.reduce((sum, r) => sum + r.pinoutsExtracted, 0);
     const errors = results
@@ -40,6 +42,7 @@ router.post('/import', async (req, res) => {
 
     res.json({
       added,
+      skipped,
       updated,
       pinouts,
       errors
@@ -51,6 +54,36 @@ router.post('/import', async (req, res) => {
       updated: 0,
       pinouts: 0,
       errors: [(error as Error).message || 'Import failed']
+    });
+  }
+});
+
+// Import a part family (all variants of a base MPN)
+router.post('/import-family', async (req, res) => {
+  try {
+    const { baseMpn, extractPinouts, skipExisting } = req.body;
+
+    if (!baseMpn || typeof baseMpn !== 'string') {
+      return res.status(400).json({ message: 'baseMpn is required' });
+    }
+
+    console.log(`[Route] Family import request for base MPN: ${baseMpn}`);
+
+    const result = await importPartFamily(baseMpn, {
+      extractPinouts: extractPinouts ?? false,
+      skipExisting: skipExisting ?? true,
+      sources: ['digikey'] // Family search uses DigiKey
+    });
+
+    res.json(result);
+  } catch (error) {
+    console.error('Family import error:', error);
+    res.status(500).json({
+      baseMpn: req.body.baseMpn || '',
+      variantsFound: 0,
+      imported: 0,
+      errors: [(error as Error).message || 'Family import failed'],
+      variants: []
     });
   }
 });

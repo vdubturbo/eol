@@ -21,17 +21,27 @@ export interface NexarPart {
 }
 
 export interface DigiKeyPart {
-  ManufacturerPartNumber: string;
-  Manufacturer: {
-    Name: string;
-  };
-  ProductDescription: string;
-  Parameters: Array<{
+  ManufacturerPartNumber?: string;
+  ManufacturerProductNumber?: string;
+  PartNumber?: string;
+  Manufacturer?: {
+    Name?: string;
+  } | string;
+  ProductDescription?: string;
+  DetailedDescription?: string;
+  Description?: string | { ProductDescription?: string; DetailedDescription?: string };
+  Parameters?: Array<{
     ParameterText: string;
     ValueText: string;
   }>;
-  PrimaryDatasheet: string;
-  ProductStatus: string;
+  PrimaryDatasheet?: string;
+  DatasheetUrl?: string;
+  PrimaryDatasheetUrl?: string;
+  ProductStatus?: string | { Status?: string; status?: string };
+  ProductVariations?: Array<{ ManufacturerPartNumber?: string }>;
+  EndOfLife?: boolean;
+  Discontinued?: boolean;
+  [key: string]: unknown; // Allow additional fields
 }
 
 export interface MouserPart {

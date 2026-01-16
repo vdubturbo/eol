@@ -26,11 +26,11 @@ export async function getComponentByMpn(mpn: string) {
       manufacturer:manufacturers(*),
       pinouts(*)
     `)
-    .eq('mpn', mpn)
-    .single();
+    .ilike('mpn', mpn)
+    .maybeSingle();
 
   if (error) throw error;
-  return data;
+  return data; // Returns null if not found
 }
 
 export async function searchComponents(

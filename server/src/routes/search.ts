@@ -8,23 +8,30 @@ const router = Router();
 router.get('/replacements/:mpn', async (req, res) => {
   try {
     const { mpn } = req.params;
+    console.log(`[Search] Looking for replacements for: ${mpn}`);
 
     // 1. Get the original component
     const original = await getComponentByMpn(mpn);
+    console.log(`[Search] Found original:`, original ? original.mpn : 'null');
 
     if (!original) {
       return res.status(404).json({ message: 'Component not found' });
     }
 
     if (!original.package_normalized) {
+      console.log(`[Search] No package_normalized for ${mpn}`);
       return res.status(400).json({ message: 'Component has no package information' });
     }
+
+    console.log(`[Search] Looking for same package: ${original.package_normalized}`);
 
     // 2. Find candidates with same package
     const candidates = await findSamePackageComponents(
       original.package_normalized,
       original.id
     );
+
+    console.log(`[Search] Found ${candidates.length} candidates`);
 
     // 3. Score each candidate
     const results: ReplacementResult[] = candidates.map(candidate => {
