@@ -1,4 +1,4 @@
-import { Play, RotateCcw, XCircle, CheckCircle2, Clock, AlertCircle, Loader2 } from 'lucide-react';
+import { RotateCcw, XCircle, CheckCircle2, Clock, AlertCircle, Loader2 } from 'lucide-react';
 import type { IngestionJob } from '@shared/types';
 
 interface JobCardProps {

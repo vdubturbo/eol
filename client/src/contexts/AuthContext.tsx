@@ -37,7 +37,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     console.log('[Auth] Fetching profile for:', userId);
     try {
       // Fetch through Express API to bypass RLS issues
-      const response = await fetch(`http://localhost:3001/api/admin/users/profile/${userId}`);
+      const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+      const response = await fetch(`${apiBase}/admin/users/profile/${userId}`);
       if (!response.ok) {
         console.error('[Auth] Error fetching profile:', response.status);
         return null;

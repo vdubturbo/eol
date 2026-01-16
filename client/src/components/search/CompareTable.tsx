@@ -3,7 +3,7 @@ import { StatusBadge } from '../common/StatusBadge';
 import { PackageBadge } from '../common/PackageBadge';
 import { PinoutTable } from '../common/PinoutTable';
 import { CompatibilityIndicator } from './CompatibilityIndicator';
-import type { ComponentWithDetails, PinFunction } from '@shared/types';
+import type { ComponentWithDetails } from '@shared/types';
 
 interface CompareTableProps {
   components: ComponentWithDetails[];
@@ -19,7 +19,6 @@ export function CompareTable({
   onSetReference,
 }: CompareTableProps) {
   const reference = components.find((c) => c.id === referenceId);
-  const others = components.filter((c) => c.id !== referenceId);
 
   // Collect all spec keys
   const specKeys = new Set<string>();

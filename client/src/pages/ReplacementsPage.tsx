@@ -1,6 +1,6 @@
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, RefreshCw, GitCompare } from 'lucide-react';
-import { useReplacements, useComponent } from '../hooks/useComponents';
+import { useReplacements } from '../hooks/useComponents';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { PackageBadge } from '../components/common/PackageBadge';
 import { MatchScoreBar } from '../components/common/MatchScoreBar';

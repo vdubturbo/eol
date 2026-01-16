@@ -36,3 +36,12 @@ coverage/
 
 # Supabase
 .supabase/
+
+# TypeScript build info
+*.tsbuildinfo
+*.d.ts
+!src/**/*.d.ts
+vite.config.js
+
+# Claude Code
+.claude/

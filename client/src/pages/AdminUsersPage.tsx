@@ -50,7 +50,8 @@ function useDeleteUser() {
   return useMutation({
     mutationFn: async (userId: string) => {
       // Call server endpoint to delete user (requires service role key)
-      const response = await fetch(`http://localhost:3001/api/admin/users/${userId}`, {
+      const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+      const response = await fetch(`${apiBase}/admin/users/${userId}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',

@@ -3,7 +3,6 @@ import type {
   SearchFilters,
   SearchResult,
   ComponentWithDetails,
-  ComponentWithManufacturer,
   ReplacementResult,
   IngestionJob,
   DashboardStats,

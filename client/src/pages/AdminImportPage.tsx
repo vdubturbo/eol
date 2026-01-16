@@ -24,7 +24,8 @@ async function importParts(params: {
   extractPinouts: boolean;
   skipExisting: boolean;
 }): Promise<ImportResult> {
-  const response = await fetch('http://localhost:3001/api/ingestion/import', {
+  const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+  const response = await fetch(`${apiBase}/ingestion/import`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -42,7 +43,8 @@ async function importFamily(params: {
   extractPinouts: boolean;
   skipExisting: boolean;
 }): Promise<FamilyResult> {
-  const response = await fetch('http://localhost:3001/api/ingestion/import-family', {
+  const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+  const response = await fetch(`${apiBase}/ingestion/import-family`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
