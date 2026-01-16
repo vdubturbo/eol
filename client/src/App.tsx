@@ -1,4 +1,6 @@
 import { Routes, Route } from 'react-router-dom';
+import { AuthProvider } from './contexts/AuthContext';
+import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { AppShell } from './components/layout/AppShell';
 import SearchPage from './pages/SearchPage';
 import ComponentDetailPage from './pages/ComponentDetailPage';
@@ -9,25 +11,73 @@ import AdminIngestionPage from './pages/AdminIngestionPage';
 import AdminImportPage from './pages/AdminImportPage';
 import AdminDataPage from './pages/AdminDataPage';
 import AdminApiUsagePage from './pages/AdminApiUsagePage';
+import AdminUsersPage from './pages/AdminUsersPage';
+import LoginPage from './pages/LoginPage';
+import SignupPage from './pages/SignupPage';
 
 function App() {
   return (
-    <AppShell>
+    <AuthProvider>
       <Routes>
-        {/* Main routes */}
-        <Route path="/" element={<SearchPage />} />
-        <Route path="/component/:id" element={<ComponentDetailPage />} />
-        <Route path="/replacements/:mpn" element={<ReplacementsPage />} />
-        <Route path="/compare" element={<ComparePage />} />
+        {/* Public routes */}
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<SignupPage />} />
 
-        {/* Admin routes */}
-        <Route path="/admin" element={<AdminDashboardPage />} />
-        <Route path="/admin/ingestion" element={<AdminIngestionPage />} />
-        <Route path="/admin/import" element={<AdminImportPage />} />
-        <Route path="/admin/data" element={<AdminDataPage />} />
-        <Route path="/admin/api-usage" element={<AdminApiUsagePage />} />
+        {/* Protected routes (any authenticated user) */}
+        <Route path="/" element={
+          <ProtectedRoute>
+            <AppShell><SearchPage /></AppShell>
+          </ProtectedRoute>
+        } />
+        <Route path="/component/:id" element={
+          <ProtectedRoute>
+            <AppShell><ComponentDetailPage /></AppShell>
+          </ProtectedRoute>
+        } />
+        <Route path="/replacements/:mpn" element={
+          <ProtectedRoute>
+            <AppShell><ReplacementsPage /></AppShell>
+          </ProtectedRoute>
+        } />
+        <Route path="/compare" element={
+          <ProtectedRoute>
+            <AppShell><ComparePage /></AppShell>
+          </ProtectedRoute>
+        } />
+
+        {/* Admin-only routes */}
+        <Route path="/admin" element={
+          <ProtectedRoute requireAdmin>
+            <AppShell><AdminDashboardPage /></AppShell>
+          </ProtectedRoute>
+        } />
+        <Route path="/admin/ingestion" element={
+          <ProtectedRoute requireAdmin>
+            <AppShell><AdminIngestionPage /></AppShell>
+          </ProtectedRoute>
+        } />
+        <Route path="/admin/import" element={
+          <ProtectedRoute requireAdmin>
+            <AppShell><AdminImportPage /></AppShell>
+          </ProtectedRoute>
+        } />
+        <Route path="/admin/data" element={
+          <ProtectedRoute requireAdmin>
+            <AppShell><AdminDataPage /></AppShell>
+          </ProtectedRoute>
+        } />
+        <Route path="/admin/api-usage" element={
+          <ProtectedRoute requireAdmin>
+            <AppShell><AdminApiUsagePage /></AppShell>
+          </ProtectedRoute>
+        } />
+        <Route path="/admin/users" element={
+          <ProtectedRoute requireAdmin>
+            <AppShell><AdminUsersPage /></AppShell>
+          </ProtectedRoute>
+        } />
       </Routes>
-    </AppShell>
+    </AuthProvider>
   );
 }
 

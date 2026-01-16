@@ -202,4 +202,96 @@ router.get('/api-usage/summary', async (req, res) => {
   }
 });
 
+// User Management
+
+// Get current user's profile by ID (bypasses RLS via service role)
+router.get('/users/profile/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { data, error } = await supabaseAdmin
+      .from('user_profiles')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) {
+      console.error('Get profile error:', error);
+      return res.status(404).json({ message: 'Profile not found' });
+    }
+    res.json(data);
+  } catch (error) {
+    console.error('Get profile error:', error);
+    res.status(500).json({ message: 'Failed to get profile' });
+  }
+});
+
+// List all users (admin only - uses service role)
+router.get('/users', async (req, res) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('user_profiles')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    res.json(data || []);
+  } catch (error) {
+    console.error('List users error:', error);
+    res.status(500).json({ message: 'Failed to list users' });
+  }
+});
+
+// Delete user (admin only - requires service role key)
+router.delete('/users/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({ message: 'User ID is required' });
+    }
+
+    // Delete from auth.users (will cascade to user_profiles via FK)
+    const { error } = await supabaseAdmin.auth.admin.deleteUser(id);
+
+    if (error) {
+      console.error('Delete user error:', error);
+      return res.status(400).json({ message: error.message });
+    }
+
+    res.json({ success: true, message: 'User deleted successfully' });
+  } catch (error) {
+    console.error('Delete user error:', error);
+    res.status(500).json({ message: 'Failed to delete user' });
+  }
+});
+
+// Update user role (admin only)
+router.patch('/users/:id/role', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { role } = req.body;
+
+    if (!id) {
+      return res.status(400).json({ message: 'User ID is required' });
+    }
+
+    if (!role || !['user', 'admin'].includes(role)) {
+      return res.status(400).json({ message: 'Valid role is required (user or admin)' });
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('user_profiles')
+      .update({ role })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    console.error('Update user role error:', error);
+    res.status(500).json({ message: 'Failed to update user role' });
+  }
+});
+
 export default router;
