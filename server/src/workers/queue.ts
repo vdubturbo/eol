@@ -8,8 +8,8 @@ let initLogged = false;
 
 function isValidRedisUrl(url: string | undefined): boolean {
   if (!url) return false;
-  // Check for placeholder values
-  if (url.includes('xxx') || url.includes('placeholder') || url.includes('your-')) return false;
+  // Check for obvious placeholder values
+  if (url.includes('your-') || url.includes('placeholder')) return false;
   // Basic URL validation
   try {
     const parsed = new URL(url);
@@ -27,7 +27,9 @@ function getConnection(): Redis | null {
 
     if (!isValidRedisUrl(redisUrl)) {
       if (!initLogged) {
-        console.log('[Queue] Redis not configured or invalid URL - job queue disabled');
+        console.log('[Queue] REDIS_URL not configured - job queue disabled');
+        console.log('[Queue] For local dev, run: docker-compose up -d');
+        console.log('[Queue] Then set REDIS_URL=redis://localhost:6379 in .env');
         initLogged = true;
       }
       connectionFailed = true;
@@ -48,12 +50,19 @@ function getConnection(): Redis | null {
         lazyConnect: true, // Don't connect immediately
       });
 
-      // Handle connection errors silently after initial warning
+      // Handle connection errors
       connection.on('error', (err) => {
         if (!connectionFailed) {
           console.warn('[Queue] Redis connection error:', err.message);
+          if (err.message.includes('ECONNREFUSED')) {
+            console.warn('[Queue] Is Redis running? Try: docker-compose up -d');
+          }
           connectionFailed = true;
         }
+      });
+
+      connection.on('connect', () => {
+        console.log('[Queue] Connected to Redis successfully');
       });
 
       // Attempt connection
