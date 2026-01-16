@@ -265,6 +265,194 @@ router.delete('/users/:id', async (req, res) => {
   }
 });
 
+// ============== Parts Management ==============
+
+// List parts with pagination, sorting, filtering
+router.get('/parts', async (req, res) => {
+  try {
+    const {
+      query,
+      lifecycle_status,
+      manufacturer_id,
+      has_pinouts,
+      sort_by = 'updated_at',
+      sort_order = 'desc',
+      page = '1',
+      page_size = '50'
+    } = req.query;
+
+    const pageNum = parseInt(page as string);
+    const pageSizeNum = parseInt(page_size as string);
+    const offset = (pageNum - 1) * pageSizeNum;
+
+    // Build query
+    let dbQuery = supabaseAdmin
+      .from('components')
+      .select(`
+        id,
+        mpn,
+        description,
+        package_normalized,
+        pin_count,
+        lifecycle_status,
+        data_sources,
+        datasheet_url,
+        created_at,
+        updated_at,
+        manufacturer:manufacturers(id, name),
+        pinouts(id)
+      `, { count: 'exact' });
+
+    // Apply filters
+    if (query) {
+      dbQuery = dbQuery.or(`mpn.ilike.%${query}%,description.ilike.%${query}%`);
+    }
+    if (lifecycle_status) {
+      const statuses = (lifecycle_status as string).split(',');
+      dbQuery = dbQuery.in('lifecycle_status', statuses);
+    }
+    if (manufacturer_id) {
+      dbQuery = dbQuery.eq('manufacturer_id', manufacturer_id);
+    }
+
+    // Apply sorting
+    const validSortFields = ['mpn', 'lifecycle_status', 'package_normalized', 'pin_count', 'created_at', 'updated_at'];
+    const sortField = validSortFields.includes(sort_by as string) ? sort_by as string : 'updated_at';
+    dbQuery = dbQuery.order(sortField, { ascending: sort_order === 'asc' });
+
+    // Apply pagination
+    dbQuery = dbQuery.range(offset, offset + pageSizeNum - 1);
+
+    const { data, error, count } = await dbQuery;
+    if (error) throw error;
+
+    // Transform to include has_pinouts flag
+    const parts = (data || []).map(part => ({
+      ...part,
+      has_pinouts: part.pinouts && part.pinouts.length > 0,
+      pinout_count: part.pinouts?.length || 0,
+      pinouts: undefined // Remove pinouts array from response
+    }));
+
+    // Filter by has_pinouts if specified (done after query since Supabase can't filter on aggregates)
+    let filteredParts = parts;
+    if (has_pinouts !== undefined) {
+      const wantsPinouts = has_pinouts === 'true';
+      filteredParts = parts.filter(p => p.has_pinouts === wantsPinouts);
+    }
+
+    res.json({
+      parts: filteredParts,
+      total: count || 0,
+      page: pageNum,
+      page_size: pageSizeNum
+    });
+  } catch (error) {
+    console.error('List parts error:', error);
+    res.status(500).json({ message: 'Failed to list parts' });
+  }
+});
+
+// Bulk delete parts
+router.post('/parts/bulk-delete', async (req, res) => {
+  try {
+    const { ids } = req.body;
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ message: 'ids array required' });
+    }
+
+    // Delete pinouts first (FK constraint)
+    await supabaseAdmin
+      .from('pinouts')
+      .delete()
+      .in('component_id', ids);
+
+    // Delete package dimensions
+    await supabaseAdmin
+      .from('package_dimensions')
+      .delete()
+      .in('component_id', ids);
+
+    // Delete components
+    const { error } = await supabaseAdmin
+      .from('components')
+      .delete()
+      .in('id', ids);
+
+    if (error) throw error;
+
+    res.json({ success: true, deleted: ids.length });
+  } catch (error) {
+    console.error('Bulk delete error:', error);
+    res.status(500).json({ message: 'Failed to delete parts' });
+  }
+});
+
+// Re-process parts (extract pinouts)
+router.post('/parts/reprocess', async (req, res) => {
+  try {
+    const { ids, extractPinouts = true } = req.body;
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ message: 'ids array required' });
+    }
+
+    // Get the MPNs for these components
+    const { data: components, error: fetchError } = await supabaseAdmin
+      .from('components')
+      .select('id, mpn')
+      .in('id', ids);
+
+    if (fetchError) throw fetchError;
+
+    const mpns = components?.map(c => c.mpn) || [];
+
+    // If extractPinouts is true, delete existing pinouts first
+    if (extractPinouts) {
+      await supabaseAdmin
+        .from('pinouts')
+        .delete()
+        .in('component_id', ids);
+    }
+
+    // Create a job for reprocessing
+    const job = await createJob({
+      job_type: 'full_import',
+      status: 'pending',
+      params: {
+        part_numbers: mpns,
+        extractPinouts,
+        reprocess: true
+      },
+      total_items: mpns.length
+    });
+
+    // Queue the job
+    try {
+      await ingestionQueue.add('full_import', {
+        jobId: job.id,
+        partNumbers: mpns,
+        extractPinouts,
+        reprocess: true
+      });
+    } catch (queueError) {
+      console.warn('Queue not available:', queueError);
+    }
+
+    res.json({
+      success: true,
+      jobId: job.id,
+      partsQueued: mpns.length
+    });
+  } catch (error) {
+    console.error('Reprocess error:', error);
+    res.status(500).json({ message: 'Failed to queue reprocessing' });
+  }
+});
+
+// ============== User Management ==============
+
 // Update user role (admin only)
 router.patch('/users/:id/role', async (req, res) => {
   try {

@@ -6,6 +6,7 @@ import {
   Database,
   BarChart3,
   Users,
+  Package,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -25,6 +26,11 @@ const adminNavItems = [
     to: '/admin/ingestion',
     icon: Download,
     label: 'Data Ingestion',
+  },
+  {
+    to: '/admin/parts',
+    icon: Package,
+    label: 'Part Management',
   },
   {
     to: '/admin/data',
