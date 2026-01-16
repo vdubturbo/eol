@@ -2,7 +2,8 @@
 builder = "nixpacks"
 
 [build.nixpacks]
-buildCommand = "npm run build"
+# Install from root for workspace support, then build client
+buildCommand = "cd .. && npm ci && npm run build --workspace=client"
 
 [deploy]
 startCommand = "npx serve dist -s -l $PORT"
