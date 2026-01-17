@@ -14,10 +14,16 @@ const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 // Helper for API calls to Express backend
 async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
+  // Get current session for auth token
+  const { data: { session } } = await supabase.auth.getSession();
+
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+    ...(session?.access_token && { 'Authorization': `Bearer ${session.access_token}` }),
+  };
+
   const response = await fetch(`${API_BASE}${endpoint}`, {
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers,
     ...options,
   });
 

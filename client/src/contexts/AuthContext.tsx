@@ -33,12 +33,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchProfile = async (userId: string): Promise<UserProfile | null> => {
+  const fetchProfile = async (userId: string, accessToken: string): Promise<UserProfile | null> => {
     console.log('[Auth] Fetching profile for:', userId);
     try {
       // Fetch through Express API to bypass RLS issues
-      const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
-      const response = await fetch(`${apiBase}/admin/users/profile/${userId}`);
+      const apiBase = import.meta.env.VITE_API_URL || '/api';
+      const response = await fetch(`${apiBase}/admin/users/profile/${userId}`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+        },
+      });
       if (!response.ok) {
         console.error('[Auth] Error fetching profile:', response.status);
         return null;
@@ -53,8 +57,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const refreshProfile = async () => {
-    if (user) {
-      const profile = await fetchProfile(user.id);
+    if (user && session?.access_token) {
+      const profile = await fetchProfile(user.id, session.access_token);
       setProfile(profile);
     }
   };
@@ -66,8 +70,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log('[Auth] Initial session:', session ? 'exists' : 'none');
       setSession(session);
       setUser(session?.user ?? null);
-      if (session?.user) {
-        const profile = await fetchProfile(session.user.id);
+      if (session?.user && session.access_token) {
+        const profile = await fetchProfile(session.user.id, session.access_token);
         setProfile(profile);
       }
       console.log('[Auth] Initial load complete, setting isLoading=false');
@@ -83,12 +87,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log('[Auth] Auth state changed:', event);
         setSession(session);
         setUser(session?.user ?? null);
-        if (session?.user) {
+        if (session?.user && session.access_token) {
           // Small delay to allow trigger to create profile on first sign-in
           if (event === 'SIGNED_IN') {
             await new Promise(resolve => setTimeout(resolve, 300));
           }
-          const profile = await fetchProfile(session.user.id);
+          const profile = await fetchProfile(session.user.id, session.access_token);
           setProfile(profile);
         } else {
           setProfile(null);
