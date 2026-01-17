@@ -9,3 +9,6 @@ cmds = ["npm run build:server"]
 
 [start]
 cmd = "npm run start:server"
+
+[variables]
+NODE_ENV = "production"
