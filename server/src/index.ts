@@ -5,6 +5,7 @@ import searchRoutes from './routes/search';
 import componentsRoutes from './routes/components';
 import adminRoutes from './routes/admin';
 import ingestionRoutes from './routes/ingestion';
+import { closeQueue } from './workers/queue';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -42,9 +43,26 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
 });
 
 // Start server
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`ComponentDB server running on port ${PORT}`);
   console.log(`Health check: http://localhost:${PORT}/health`);
 });
+
+// Graceful shutdown
+async function shutdown(signal: string) {
+  console.log(`\n${signal} received, shutting down...`);
+
+  server.close(() => {
+    console.log('HTTP server closed');
+  });
+
+  await closeQueue();
+  console.log('Redis connections closed');
+
+  process.exit(0);
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 export default app;

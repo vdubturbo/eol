@@ -2,6 +2,7 @@ import { Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { AppShell } from './components/layout/AppShell';
+import LandingPage from './pages/LandingPage';
 import SearchPage from './pages/SearchPage';
 import ComponentDetailPage from './pages/ComponentDetailPage';
 import ReplacementsPage from './pages/ReplacementsPage';
@@ -21,11 +22,12 @@ function App() {
     <AuthProvider>
       <Routes>
         {/* Public routes */}
+        <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
 
         {/* Protected routes (any authenticated user) */}
-        <Route path="/" element={
+        <Route path="/search" element={
           <ProtectedRoute>
             <AppShell><SearchPage /></AppShell>
           </ProtectedRoute>

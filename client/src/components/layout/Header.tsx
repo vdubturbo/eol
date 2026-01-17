@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Cpu, Settings, Search, User, LogOut, ChevronDown, Shield } from 'lucide-react';
+import { Settings, Search, User, LogOut, ChevronDown, Shield } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
 export function Header() {
@@ -26,7 +26,7 @@ export function Header() {
   const handleSignOut = async () => {
     try {
       await signOut();
-      navigate('/login');
+      navigate('/');
     } catch (error) {
       console.error('Failed to sign out:', error);
     }
@@ -36,22 +36,16 @@ export function Header() {
     <header className="h-16 bg-bg-secondary border-b border-gray-800 sticky top-0 z-50">
       <div className="h-full px-4 flex items-center justify-between">
         {/* Logo */}
-        <Link to="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-          <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-accent-primary/10 border border-accent-primary/30">
-            <Cpu className="h-6 w-6 text-accent-primary" />
-          </div>
-          <div>
-            <h1 className="text-lg font-bold text-white">ComponentDB</h1>
-            <p className="text-xs text-gray-500">Drop-in Replacement Finder</p>
-          </div>
+        <Link to="/search" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+          <img src="/images/pinpal.png" alt="PinPal" className="h-10" />
         </Link>
 
         {/* Navigation */}
         <nav className="flex items-center gap-2">
           <Link
-            to="/"
+            to="/search"
             className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              !isAdminRoute
+              location.pathname.startsWith('/search') || location.pathname.startsWith('/component') || location.pathname.startsWith('/replacements') || location.pathname.startsWith('/compare')
                 ? 'bg-bg-tertiary text-white'
                 : 'text-gray-400 hover:text-white hover:bg-bg-tertiary'
             }`}

@@ -35,7 +35,7 @@ export default function SignupPage() {
       await signUp(email, password, fullName || undefined);
       setSuccess(true);
       // Redirect after a short delay
-      setTimeout(() => navigate('/'), 2000);
+      setTimeout(() => navigate('/search'), 2000);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create account');
     } finally {

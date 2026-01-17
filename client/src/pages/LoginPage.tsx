@@ -13,7 +13,7 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/';
+  const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/search';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
