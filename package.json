@@ -13,7 +13,7 @@
     "build": "npm run build --workspace=client && npm run build --workspace=server",
     "build:server": "npm run build --workspace=server",
     "build:client": "npm run build --workspace=client",
-    "start:server": "node server/dist/index.js",
+    "start:server": "node server/dist/server/src/index.js",
     "start:client": "npx serve client/dist -s -l ${PORT:-3000}",
     "seed": "npx tsx scripts/seed.ts"
   },
