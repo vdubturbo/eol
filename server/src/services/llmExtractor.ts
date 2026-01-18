@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { trackApiUsage } from '../db/queries';
+import { getPrompt, renderTemplate, logPromptExecution } from './promptService';
 import type { ExtractedPinout, ExtractedSpecs, PinFunction } from '../types';
 
 let openai: OpenAI | null = null;
@@ -15,6 +16,7 @@ function getClient(): OpenAI {
   return openai;
 }
 
+// Fallback prompts if database prompts aren't available
 const PINOUT_EXTRACTION_PROMPT = `You are an expert at extracting pinout information from electronic component datasheets.
 
 Given the following text from a datasheet, extract the pinout information.
@@ -75,9 +77,12 @@ Format:
 }`;
 
 export async function extractPinoutsWithLLM(
-  datasheetText: string
+  datasheetText: string,
+  mpn?: string,
+  packageType?: string
 ): Promise<ExtractedPinout[]> {
   const client = getClient();
+  const startTime = Date.now();
 
   // Truncate if too long
   const maxLength = 15000;
@@ -85,48 +90,99 @@ export async function extractPinoutsWithLLM(
     ? datasheetText.substring(0, maxLength) + '\n...[truncated]'
     : datasheetText;
 
-  const response = await client.chat.completions.create({
-    model: 'gpt-4o-mini',
-    max_tokens: 2000,
-    messages: [
-      {
-        role: 'system',
-        content: PINOUT_EXTRACTION_PROMPT
-      },
-      {
-        role: 'user',
-        content: `Datasheet text:\n${truncatedText}`
-      }
-    ],
-    response_format: { type: 'json_object' }
-  });
+  // Try to get prompt from database
+  const dbPrompt = await getPrompt('pinout_extraction');
 
-  // Track usage
-  await trackApiUsage('openai', {
-    endpoint: 'chat/completions',
-    tokens_used: (response.usage?.prompt_tokens || 0) + (response.usage?.completion_tokens || 0),
-    estimated_cost: calculateOpenAICost(response.usage)
-  });
+  let systemPrompt: string;
+  let userPrompt: string;
+  let model = 'gpt-4o-mini';
+  let maxTokens = 2000;
+  let temperature = 0.1;
 
-  // Parse response
-  const content = response.choices[0]?.message?.content;
-  if (!content) {
-    throw new Error('No response content');
+  if (dbPrompt) {
+    systemPrompt = dbPrompt.system_prompt;
+    userPrompt = renderTemplate(dbPrompt.user_prompt_template, {
+      mpn: mpn || 'unknown',
+      package_type: packageType || 'unknown',
+      datasheet_text: truncatedText
+    });
+    model = dbPrompt.model;
+    maxTokens = dbPrompt.max_tokens;
+    temperature = dbPrompt.temperature;
+  } else {
+    // Fallback to hardcoded prompts
+    systemPrompt = PINOUT_EXTRACTION_PROMPT;
+    userPrompt = `Datasheet text:\n${truncatedText}`;
   }
+
+  let response;
+  let content = '';
+  let parsed: unknown = null;
+  let success = true;
+  let errorMessage: string | undefined;
 
   try {
-    const parsed = JSON.parse(content);
-    return parsed.pinouts || [];
-  } catch {
-    console.error('Failed to parse LLM response:', content);
+    response = await client.chat.completions.create({
+      model,
+      max_tokens: maxTokens,
+      temperature,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      response_format: { type: 'json_object' }
+    });
+
+    // Track usage
+    await trackApiUsage('openai', {
+      endpoint: 'chat/completions',
+      tokens_used: (response.usage?.prompt_tokens || 0) + (response.usage?.completion_tokens || 0),
+      estimated_cost: calculateOpenAICost(response.usage)
+    });
+
+    content = response.choices[0]?.message?.content || '';
+    if (!content) {
+      throw new Error('No response content');
+    }
+
+    parsed = JSON.parse(content);
+  } catch (err) {
+    success = false;
+    errorMessage = err instanceof Error ? err.message : 'Unknown error';
+    console.error('Failed to extract pinouts:', errorMessage);
+  }
+
+  // Log execution if using database prompt
+  if (dbPrompt) {
+    await logPromptExecution({
+      promptName: 'pinout_extraction',
+      promptId: dbPrompt.id,
+      inputVariables: { mpn: mpn || 'unknown', package_type: packageType || 'unknown' },
+      renderedPrompt: userPrompt,
+      responseRaw: content,
+      responseParsed: parsed,
+      inputTokens: response?.usage?.prompt_tokens || 0,
+      outputTokens: response?.usage?.completion_tokens || 0,
+      latencyMs: Date.now() - startTime,
+      componentMpn: mpn,
+      success,
+      errorMessage
+    });
+  }
+
+  if (!success || !parsed) {
     return [];
   }
+
+  return (parsed as { pinouts?: ExtractedPinout[] }).pinouts || (parsed as { pins?: ExtractedPinout[] }).pins || [];
 }
 
 export async function extractSpecsWithLLM(
-  datasheetText: string
+  datasheetText: string,
+  mpn?: string
 ): Promise<ExtractedSpecs> {
   const client = getClient();
+  const startTime = Date.now();
 
   // Truncate if too long
   const maxLength = 15000;
@@ -134,40 +190,89 @@ export async function extractSpecsWithLLM(
     ? datasheetText.substring(0, maxLength) + '\n...[truncated]'
     : datasheetText;
 
-  const response = await client.chat.completions.create({
-    model: 'gpt-4o-mini',
-    max_tokens: 1000,
-    messages: [
-      {
-        role: 'system',
-        content: SPECS_EXTRACTION_PROMPT
-      },
-      {
-        role: 'user',
-        content: `Datasheet text:\n${truncatedText}`
-      }
-    ],
-    response_format: { type: 'json_object' }
-  });
+  // Try to get prompt from database
+  const dbPrompt = await getPrompt('specs_extraction');
 
-  await trackApiUsage('openai', {
-    endpoint: 'chat/completions',
-    tokens_used: (response.usage?.prompt_tokens || 0) + (response.usage?.completion_tokens || 0),
-    estimated_cost: calculateOpenAICost(response.usage)
-  });
+  let systemPrompt: string;
+  let userPrompt: string;
+  let model = 'gpt-4o-mini';
+  let maxTokens = 1500;
+  let temperature = 0.1;
 
-  const content = response.choices[0]?.message?.content;
-  if (!content) {
-    throw new Error('No response content');
+  if (dbPrompt) {
+    systemPrompt = dbPrompt.system_prompt;
+    userPrompt = renderTemplate(dbPrompt.user_prompt_template, {
+      mpn: mpn || 'unknown',
+      datasheet_text: truncatedText
+    });
+    model = dbPrompt.model;
+    maxTokens = dbPrompt.max_tokens;
+    temperature = dbPrompt.temperature;
+  } else {
+    // Fallback to hardcoded prompts
+    systemPrompt = SPECS_EXTRACTION_PROMPT;
+    userPrompt = `Datasheet text:\n${truncatedText}`;
   }
+
+  let response;
+  let content = '';
+  let parsed: unknown = null;
+  let success = true;
+  let errorMessage: string | undefined;
 
   try {
-    const parsed = JSON.parse(content);
-    return parsed.specs || {};
-  } catch {
-    console.error('Failed to parse LLM response:', content);
+    response = await client.chat.completions.create({
+      model,
+      max_tokens: maxTokens,
+      temperature,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      response_format: { type: 'json_object' }
+    });
+
+    await trackApiUsage('openai', {
+      endpoint: 'chat/completions',
+      tokens_used: (response.usage?.prompt_tokens || 0) + (response.usage?.completion_tokens || 0),
+      estimated_cost: calculateOpenAICost(response.usage)
+    });
+
+    content = response.choices[0]?.message?.content || '';
+    if (!content) {
+      throw new Error('No response content');
+    }
+
+    parsed = JSON.parse(content);
+  } catch (err) {
+    success = false;
+    errorMessage = err instanceof Error ? err.message : 'Unknown error';
+    console.error('Failed to extract specs:', errorMessage);
+  }
+
+  // Log execution if using database prompt
+  if (dbPrompt) {
+    await logPromptExecution({
+      promptName: 'specs_extraction',
+      promptId: dbPrompt.id,
+      inputVariables: { mpn: mpn || 'unknown' },
+      renderedPrompt: userPrompt,
+      responseRaw: content,
+      responseParsed: parsed,
+      inputTokens: response?.usage?.prompt_tokens || 0,
+      outputTokens: response?.usage?.completion_tokens || 0,
+      latencyMs: Date.now() - startTime,
+      componentMpn: mpn,
+      success,
+      errorMessage
+    });
+  }
+
+  if (!success || !parsed) {
     return {};
   }
+
+  return (parsed as { specs?: ExtractedSpecs }).specs || {};
 }
 
 function calculateOpenAICost(usage?: { prompt_tokens?: number; completion_tokens?: number }): number {

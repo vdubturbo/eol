@@ -221,3 +221,71 @@ export interface FilterOptions {
   packages: string[];
   manufacturers: { id: string; name: string }[];
 }
+
+// LLM Prompt Types
+export interface LLMPrompt {
+  id: string;
+  name: string;
+  display_name: string;
+  description: string | null;
+  category: string;
+  system_prompt: string;
+  user_prompt_template: string;
+  model: string;
+  temperature: number;
+  max_tokens: number;
+  is_active: boolean;
+  version: number;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+}
+
+export interface LLMPromptVersion {
+  id: string;
+  prompt_id: string;
+  version: number;
+  system_prompt: string;
+  user_prompt_template: string;
+  model: string;
+  temperature: number;
+  max_tokens: number;
+  created_at: string;
+  created_by: string | null;
+  change_notes: string | null;
+}
+
+export interface LLMPromptLog {
+  id: string;
+  prompt_id: string | null;
+  prompt_name: string;
+  input_variables: Record<string, unknown>;
+  rendered_user_prompt: string;
+  response_raw: string;
+  response_parsed: unknown;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  latency_ms: number;
+  estimated_cost: number;
+  component_mpn: string | null;
+  success: boolean;
+  error_message: string | null;
+  created_at: string;
+}
+
+export interface LLMPromptWithVersions extends LLMPrompt {
+  versions: LLMPromptVersion[];
+}
+
+export interface LLMPromptStats {
+  prompt_name: string;
+  total_calls: number;
+  successful_calls: number;
+  failed_calls: number;
+  success_rate: number;
+  total_tokens: number;
+  total_cost: number;
+  avg_latency_ms: number;
+}

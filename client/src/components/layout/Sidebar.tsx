@@ -7,6 +7,7 @@ import {
   BarChart3,
   Users,
   Package,
+  MessageSquare,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -41,6 +42,11 @@ const adminNavItems = [
     to: '/admin/api-usage',
     icon: BarChart3,
     label: 'API Usage',
+  },
+  {
+    to: '/admin/prompts',
+    icon: MessageSquare,
+    label: 'LLM Prompts',
   },
   {
     to: '/admin/users',

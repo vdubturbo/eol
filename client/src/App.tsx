@@ -14,6 +14,7 @@ import AdminDataPage from './pages/AdminDataPage';
 import AdminApiUsagePage from './pages/AdminApiUsagePage';
 import AdminUsersPage from './pages/AdminUsersPage';
 import AdminPartsPage from './pages/AdminPartsPage';
+import AdminPromptsPage from './pages/AdminPromptsPage';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 
@@ -82,6 +83,11 @@ function App() {
         <Route path="/admin/parts" element={
           <ProtectedRoute requireAdmin>
             <AppShell><AdminPartsPage /></AppShell>
+          </ProtectedRoute>
+        } />
+        <Route path="/admin/prompts" element={
+          <ProtectedRoute requireAdmin>
+            <AppShell><AdminPromptsPage /></AppShell>
           </ProtectedRoute>
         } />
       </Routes>
