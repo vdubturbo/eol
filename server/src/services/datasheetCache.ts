@@ -230,6 +230,17 @@ Datasheet text:
   // Parse response
   try {
     const parsed = JSON.parse(content);
+
+    // Log if no packages found
+    if (!parsed.packages || Object.keys(parsed.packages).length === 0) {
+      console.warn(`[DatasheetCache] No packages extracted for ${mpnBase}`);
+      console.warn(`[DatasheetCache] Text length: ${datasheetText.length}`);
+      console.warn(`[DatasheetCache] First 500 chars: ${datasheetText.slice(0, 500)}`);
+      console.warn(`[DatasheetCache] LLM response: ${content.slice(0, 500)}`);
+    } else {
+      console.log(`[DatasheetCache] Extracted ${Object.keys(parsed.packages).length} packages for ${mpnBase}`);
+    }
+
     return {
       pinouts_by_package: parsed.packages || {},
       specs: parsed.specs || {},
@@ -238,6 +249,7 @@ Datasheet text:
     };
   } catch (err) {
     console.error('[DatasheetCache] Failed to parse LLM response:', err);
+    console.error('[DatasheetCache] Raw content:', content.slice(0, 500));
     return {
       pinouts_by_package: {},
       specs: {},
@@ -310,10 +322,26 @@ function normalizeDatasheetUrl(url: string): string {
   // Remove tracking parameters and normalize
   try {
     const parsed = new URL(url);
-    // Remove common tracking params
+
+    // TI-specific tracking params
+    parsed.searchParams.delete('HQS');
+    parsed.searchParams.delete('ts');
+    parsed.searchParams.delete('ref_url');
+
+    // UTM tracking params
     parsed.searchParams.delete('utm_source');
     parsed.searchParams.delete('utm_medium');
     parsed.searchParams.delete('utm_campaign');
+    parsed.searchParams.delete('utm_content');
+    parsed.searchParams.delete('utm_term');
+
+    // Google/Mouser tracking
+    parsed.searchParams.delete('gclid');
+    parsed.searchParams.delete('gad_source');
+
+    // DigiKey tracking
+    parsed.searchParams.delete('mkt_tok');
+
     return parsed.toString();
   } catch {
     return url;
