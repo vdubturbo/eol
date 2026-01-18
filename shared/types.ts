@@ -46,6 +46,7 @@ export interface Component {
   package_source: 'api_params' | 'api_description' | 'datasheet' | 'manual' | null;
   pinout_source: 'datasheet_cache' | 'direct_extraction' | 'manual' | null;
   datasheet_cache_id: string | null;
+  mpn_suffix: string | null;
 
   // Timestamps
   created_at: string;

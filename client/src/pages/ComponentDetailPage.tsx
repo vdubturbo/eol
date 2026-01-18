@@ -114,6 +114,14 @@ export default function ComponentDetailPage() {
                   mountingStyle={component.mounting_style}
                 />
               </div>
+              {component.package_raw && component.package_raw !== component.package_normalized && (
+                <div className="flex items-center justify-between py-2 border-b border-gray-800">
+                  <span className="text-gray-400">Package (Raw)</span>
+                  <span className="font-mono text-white text-sm">
+                    {component.package_raw}
+                  </span>
+                </div>
+              )}
               <div className="flex items-center justify-between py-2 border-b border-gray-800">
                 <span className="text-gray-400">Pin Count</span>
                 <span className="font-mono text-white">
@@ -146,12 +154,14 @@ export default function ComponentDetailPage() {
           </div>
 
           {/* Pinout */}
-          {component.pinouts && component.pinouts.length > 0 && (
-            <div className="card">
-              <h2 className="text-lg font-semibold text-white mb-4">Pinout</h2>
+          <div className="card">
+            <h2 className="text-lg font-semibold text-white mb-4">Pinout</h2>
+            {component.pinouts && component.pinouts.length > 0 ? (
               <PinoutTable pinouts={component.pinouts} />
-            </div>
-          )}
+            ) : (
+              <p className="text-gray-500 text-sm italic">No pinout data available</p>
+            )}
+          </div>
         </div>
 
         {/* Right column */}

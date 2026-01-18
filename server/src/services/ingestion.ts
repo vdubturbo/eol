@@ -213,7 +213,7 @@ export async function importPartByMpn(
 
     // Step 5: Save component to database
     console.log(`[Ingestion] Saving component to database...`);
-    console.log(`[Ingestion] Package: raw="${partData.package_raw}" normalized="${partData.package_normalized}" source="${partData.package_source}"`);
+    console.log(`[Ingestion] Package: raw="${partData.package_raw}" normalized="${partData.package_normalized}" source="${partData.package_source}" suffix="${partData.mpn_suffix}"`);
     const component = await upsertComponent({
       mpn: partData.mpn,
       manufacturer_id: manufacturer.id,
@@ -223,6 +223,7 @@ export async function importPartByMpn(
       package_raw: partData.package_raw,
       package_normalized: partData.package_normalized,
       package_source: partData.package_source || null,
+      mpn_suffix: partData.mpn_suffix || null,
       pinout_source: pinoutSource || null,
       datasheet_cache_id: datasheetCacheId || null,
       specs: partData.specs,

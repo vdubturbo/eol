@@ -107,16 +107,36 @@ export function SpecsGrid({ specs, compact = false }: SpecsGridProps) {
     .map((def) => ({ ...def, value: renderValue(def) }))
     .filter((s) => s.value !== null);
 
-  if (visibleSpecs.length === 0) {
+  // Collect keys that are handled by predefined specs
+  const handledKeys = new Set([
+    'vin_min', 'vin_max', 'vout_min', 'vout_max', 'vout_type',
+    'iout_max', 'switching_freq_min', 'switching_freq_max',
+    'efficiency', 'operating_temp_min', 'operating_temp_max'
+  ]);
+
+  // Find additional specs not in the predefined list
+  const additionalSpecs = Object.entries(specs || {})
+    .filter(([key, value]) => !handledKeys.has(key) && value !== undefined && value !== null)
+    .map(([key, value]) => ({
+      key,
+      label: key.replace(/_/g, ' '),
+      value: String(value),
+    }));
+
+  if (visibleSpecs.length === 0 && additionalSpecs.length === 0) {
     return (
       <div className="text-gray-500 text-sm italic">No specifications available</div>
     );
   }
 
   if (compact) {
+    const allSpecs = [
+      ...visibleSpecs.map(s => ({ key: s.key, label: s.label, value: s.value, icon: s.icon })),
+      ...additionalSpecs.map(s => ({ key: s.key, label: s.label, value: s.value, icon: null })),
+    ];
     return (
       <div className="flex flex-wrap gap-2">
-        {visibleSpecs.slice(0, 4).map((spec) => (
+        {allSpecs.slice(0, 4).map((spec) => (
           <div
             key={spec.key}
             className="flex items-center gap-1.5 px-2 py-1 bg-bg-tertiary rounded text-xs"
@@ -131,18 +151,38 @@ export function SpecsGrid({ specs, compact = false }: SpecsGridProps) {
   }
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-      {visibleSpecs.map((spec) => (
-        <div key={spec.key} className="bg-bg-tertiary rounded-lg p-4">
-          <div className="flex items-center gap-2 mb-2">
-            {spec.icon}
-            <span className="text-xs text-gray-400 uppercase tracking-wider">
-              {spec.label}
-            </span>
-          </div>
-          <div className="font-mono text-lg text-white">{spec.value}</div>
+    <div className="space-y-4">
+      {/* Predefined specs with icons */}
+      {visibleSpecs.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          {visibleSpecs.map((spec) => (
+            <div key={spec.key} className="bg-bg-tertiary rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-2">
+                {spec.icon}
+                <span className="text-xs text-gray-400 uppercase tracking-wider">
+                  {spec.label}
+                </span>
+              </div>
+              <div className="font-mono text-lg text-white">{spec.value}</div>
+            </div>
+          ))}
         </div>
-      ))}
+      )}
+
+      {/* Additional specs */}
+      {additionalSpecs.length > 0 && (
+        <div className="border-t border-gray-700 pt-4">
+          <h3 className="text-xs text-gray-500 uppercase tracking-wider mb-3">Additional Specifications</h3>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+            {additionalSpecs.map((spec) => (
+              <div key={spec.key} className="flex items-center justify-between py-1.5 border-b border-gray-800">
+                <span className="text-sm text-gray-400 capitalize">{spec.label}</span>
+                <span className="font-mono text-sm text-white">{spec.value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
