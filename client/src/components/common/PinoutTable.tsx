@@ -19,6 +19,7 @@ const pinFunctionColors: Record<PinFunction, string> = {
   FREQUENCY: 'text-indigo-400',
   SYNC: 'text-violet-400',
   NC: 'text-gray-600',
+  ADJUST: 'text-amber-400',
   OTHER: 'text-gray-400',
 };
 
@@ -36,6 +37,7 @@ const pinFunctionLabels: Record<PinFunction, string> = {
   FREQUENCY: 'FREQ',
   SYNC: 'SYNC',
   NC: 'NC',
+  ADJUST: 'ADJ',
   OTHER: 'OTHER',
 };
 

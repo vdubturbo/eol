@@ -23,11 +23,12 @@ Given the following text from a datasheet, extract the pinout information.
 
 For each pin, provide:
 - pin_number: The pin number (integer)
-- pin_name: The pin name (e.g., VIN, GND, EN)
+- pin_name: The pin name (e.g., VIN, GND, EN, ADJ)
 - pin_function: One of these categories:
-  - INPUT_VOLTAGE: Power input pins (VIN, VCC, VBAT)
-  - OUTPUT_VOLTAGE: Power output pins (VOUT, SW for regulators)
+  - INPUT_VOLTAGE: Power input pins (VIN, VCC, VBAT, INPUT)
+  - OUTPUT_VOLTAGE: Power output pins (VOUT, SW for regulators, OUTPUT)
   - GROUND: Ground pins (GND, PGND, AGND)
+  - ADJUST: Voltage adjust pins (ADJ, ADJUST) - used on adjustable regulators like LM317
   - ENABLE: Enable/shutdown pins (EN, SHDN, ON)
   - FEEDBACK: Feedback pins (FB, VSNS, VSENSE)
   - BOOTSTRAP: Bootstrap pins (BOOT, BST)
@@ -41,11 +42,17 @@ For each pin, provide:
   - OTHER: Any other function
 - confidence: Your confidence in this extraction (0.0 to 1.0)
 
+IMPORTANT: For adjustable voltage regulators like LM317, LM317A, LM117:
+- Pin 1 is typically ADJUST (sets output voltage via resistor divider)
+- Pin 2 is typically OUTPUT (regulated output voltage)
+- Pin 3 is typically INPUT (unregulated input voltage)
+
 Respond with valid JSON only, no explanation. Format:
 {
   "pinouts": [
-    {"pin_number": 1, "pin_name": "BOOT", "pin_function": "BOOTSTRAP", "confidence": 0.95},
-    ...
+    {"pin_number": 1, "pin_name": "ADJUST", "pin_function": "ADJUST", "confidence": 0.95},
+    {"pin_number": 2, "pin_name": "OUTPUT", "pin_function": "OUTPUT_VOLTAGE", "confidence": 0.95},
+    {"pin_number": 3, "pin_name": "INPUT", "pin_function": "INPUT_VOLTAGE", "confidence": 0.95}
   ]
 }`;
 
@@ -303,6 +310,7 @@ export function mapToPinFunction(functionString: string): PinFunction {
     'FREQUENCY': 'FREQUENCY',
     'SYNC': 'SYNC',
     'NC': 'NC',
+    'ADJUST': 'ADJUST',
   };
 
   return mapping[functionString] || 'OTHER';

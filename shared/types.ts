@@ -101,6 +101,7 @@ export type PinFunction =
   | 'FREQUENCY'
   | 'SYNC'
   | 'NC'
+  | 'ADJUST'
   | 'OTHER';
 
 export interface PackageDimensions {
