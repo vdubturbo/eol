@@ -164,30 +164,43 @@ export function normalizeDigiKeyPart(part: DigiKeyPart) {
     || (part.DatasheetUrl as string)
     || (part.PrimaryDatasheetUrl as string);
 
-  // Extract package info from Parameters or dedicated fields
+  // IMPROVED: Extract package from multiple sources with priority
   let packageRaw = '';
-  let packageNormalized = '';
-  
-  // Check for Package/Case in Parameters
-  const packageParam = (part.Parameters || []).find(
-    p => p.ParameterText?.toLowerCase().includes('package') || 
-         p.ParameterText?.toLowerCase().includes('case')
-  );
-  if (packageParam) {
-    packageRaw = packageParam.ValueText || '';
-  }
-  
-  // Also check direct fields
-  if (!packageRaw && part.Package) {
-    packageRaw = typeof part.Package === 'string' ? part.Package : (part.Package as { Name?: string })?.Name || '';
-  }
-  
-  // Normalize common package names
-  if (packageRaw) {
-    packageNormalized = normalizePackageName(packageRaw);
+  let packageSource: 'api_params' | 'api_description' | 'manual' = 'api_params';
+
+  // Priority 1: Parse from description (most reliable for specific packages)
+  // Example: "IC REG LINEAR 2.5V 1A SOT89-3"
+  const descPackage = extractPackageFromDescription(description);
+  if (descPackage) {
+    packageRaw = descPackage;
+    packageSource = 'api_description';
   }
 
-  console.log(`[DigiKey] Package for ${mpn}: raw="${packageRaw}" normalized="${packageNormalized}"`);
+  // Priority 2: Check for Package/Case in Parameters
+  if (!packageRaw) {
+    const packageParam = (part.Parameters || []).find(
+      p => p.ParameterText?.toLowerCase().includes('package') ||
+           p.ParameterText?.toLowerCase().includes('case')
+    );
+    if (packageParam?.ValueText) {
+      packageRaw = packageParam.ValueText;
+      packageSource = 'api_params';
+    }
+  }
+
+  // Priority 3: Direct Package field
+  if (!packageRaw && part.Package) {
+    packageRaw = typeof part.Package === 'string' ? part.Package : (part.Package as { Name?: string })?.Name || '';
+    packageSource = 'api_params';
+  }
+
+  // Normalize common package names
+  const packageNormalized = packageRaw ? normalizePackageName(packageRaw) : '';
+
+  // Extract MPN suffix for pinout matching
+  const mpnSuffix = extractMpnSuffix(mpn);
+
+  console.log(`[DigiKey] Package for ${mpn}: raw="${packageRaw}" normalized="${packageNormalized}" source=${packageSource} suffix="${mpnSuffix}"`);
 
   return {
     mpn,
@@ -197,8 +210,69 @@ export function normalizeDigiKeyPart(part: DigiKeyPart) {
     lifecycle_status: mapLifecycleStatus(part.ProductStatus || '', part),
     package_raw: packageRaw || undefined,
     package_normalized: packageNormalized || undefined,
+    package_source: packageSource,
+    mpn_suffix: mpnSuffix,
     specs
   };
+}
+
+// Extract package from description text
+function extractPackageFromDescription(description: string): string | null {
+  if (!description) return null;
+
+  // Common package patterns in descriptions (order by specificity)
+  const patterns = [
+    /\b(SOT-?89-?\d?)\b/i,
+    /\b(SOT-?223-?\d?)\b/i,
+    /\b(TO-?252-?\d?)\b/i,
+    /\b(TO-?263-?\d?)\b/i,
+    /\b(TO-?220[A-Z]*-?\d?)\b/i,
+    /\b(TO-?92[A-Z]*-?\d?)\b/i,
+    /\b(SOIC-?\d+)\b/i,
+    /\b(SOP-?\d+)\b/i,
+    /\b(MSOP-?\d+)\b/i,
+    /\b(TSSOP-?\d+)\b/i,
+    /\b(SSOP-?\d+)\b/i,
+    /\b(QFN-?\d+)\b/i,
+    /\b(DFN-?\d+)\b/i,
+    /\b(VQFN-?\d+)\b/i,
+    /\b(WSON-?\d+)\b/i,
+    /\b(D-?PAK)\b/i,
+    /\b(D2-?PAK)\b/i,
+    /\b(DPAK)\b/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = description.match(pattern);
+    if (match) return match[1];
+  }
+
+  return null;
+}
+
+// Extract MPN suffix for package variant matching
+function extractMpnSuffix(mpn: string): string | null {
+  if (!mpn) return null;
+
+  // Pattern for common voltage regulator MPNs:
+  // AZ1117CH-3.3TRG1 -> "H"
+  // AZ1117CR-3.3TRG1 -> "R"
+  // AZ1117CR2-3.3TRG1 -> "R2"
+  // LM1117DT-3.3 -> "DT"
+
+  // Try: XXXX1117[letters]SUFFIX-voltage
+  const match1 = mpn.match(/\d{4}[A-Z]*([A-Z]\d?)-[\d.]/i);
+  if (match1) return match1[1].toUpperCase();
+
+  // Try: XX1117SUFFIX-voltage (shorter prefix)
+  const match2 = mpn.match(/\d{2,4}([A-Z]{1,2}\d?)-[\d.]/i);
+  if (match2) return match2[1].toUpperCase();
+
+  // Generic pattern: letters followed by suffix before dash+number
+  const match3 = mpn.match(/[A-Z]+\d+([A-Z]{1,3})-/i);
+  if (match3) return match3[1].toUpperCase();
+
+  return null;
 }
 
 // Normalize package names to standard formats

@@ -3,6 +3,7 @@ import { getPartByMpn as getNexarPart, normalizeNexarPart } from './nexar';
 import { getPartByMpn as getDigiKeyPart, normalizeDigiKeyPart, searchParts as searchDigiKeyParts } from './digikey';
 import { extractFromUrl } from './pdfExtractor';
 import { extractPinoutsWithLLM, extractSpecsWithLLM, mapToPinFunction } from './llmExtractor';
+import { getOrExtractDatasheet, matchPinoutToComponent } from './datasheetCache';
 import { upsertComponent, upsertPinouts, getOrCreateManufacturer } from '../db/queries';
 import type { ExtractedPinout, DataSource, LifecycleStatus } from '../types';
 
@@ -98,6 +99,8 @@ export async function importPartByMpn(
       lifecycle_status?: string;
       package_raw?: string;
       package_normalized?: string;
+      package_source?: 'api_params' | 'api_description' | 'datasheet' | 'manual';
+      mpn_suffix?: string | null;
       specs: Record<string, unknown>;
     } | null = null;
 
@@ -141,22 +144,62 @@ export async function importPartByMpn(
 
     // Step 3: Extract pinouts from datasheet if URL available
     let extractedPinouts: ExtractedPinout[] = [];
+    let datasheetCacheId: string | undefined;
+    let pinoutSource: 'datasheet_cache' | 'direct_extraction' | undefined;
 
     if (extractPinouts && partData.datasheet_url) {
       try {
-        console.log(`[Ingestion] Extracting PDF from: ${partData.datasheet_url}`);
-        const pdfData = await extractFromUrl(partData.datasheet_url);
-        console.log(`[Ingestion] PDF extracted: ${pdfData.pages} pages, ${pdfData.text.length} chars`);
+        console.log(`[Ingestion] Checking datasheet cache for: ${partData.datasheet_url.slice(0, 60)}...`);
 
-        console.log(`[Ingestion] Running LLM extraction...`);
-        extractedPinouts = await extractPinoutsWithLLM(pdfData.text);
-        result.dataSources.push('pdf');
-        console.log(`[Ingestion] Extracted ${extractedPinouts.length} pinouts`);
+        // Try datasheet cache first (shared across package variants)
+        const extraction = await getOrExtractDatasheet(partData.datasheet_url, partData.mpn);
 
-        // Also extract specs if not already present
-        if (Object.keys(partData.specs).length === 0) {
-          const extractedSpecs = await extractSpecsWithLLM(pdfData.text);
-          partData.specs = { ...partData.specs, ...extractedSpecs };
+        if (extraction) {
+          datasheetCacheId = extraction.id;
+          console.log(`[Ingestion] Found ${Object.keys(extraction.pinouts_by_package).length} package variants in cache`);
+
+          // Match pinout to this specific component's package
+          const matchedPinout = matchPinoutToComponent(
+            extraction,
+            partData.package_normalized,
+            partData.mpn_suffix || null
+          );
+
+          if (matchedPinout) {
+            extractedPinouts = matchedPinout.pins.map(p => ({
+              pin_number: p.pin_number,
+              pin_name: p.pin_name,
+              pin_function: p.pin_function,
+              confidence: p.confidence || 0.8
+            }));
+            pinoutSource = 'datasheet_cache';
+            result.dataSources.push('pdf');
+            console.log(`[Ingestion] Matched ${extractedPinouts.length} pinouts from cache`);
+          }
+
+          // Merge cached specs if we don't have them
+          if (Object.keys(partData.specs).length === 0 && extraction.specs) {
+            partData.specs = { ...partData.specs, ...extraction.specs };
+          }
+        }
+
+        // Fallback to direct extraction if cache didn't provide pinouts
+        if (extractedPinouts.length === 0) {
+          console.log(`[Ingestion] Cache miss or no match, falling back to direct extraction...`);
+          const pdfData = await extractFromUrl(partData.datasheet_url);
+          console.log(`[Ingestion] PDF extracted: ${pdfData.pages} pages, ${pdfData.text.length} chars`);
+
+          console.log(`[Ingestion] Running LLM extraction...`);
+          extractedPinouts = await extractPinoutsWithLLM(pdfData.text);
+          pinoutSource = 'direct_extraction';
+          result.dataSources.push('pdf');
+          console.log(`[Ingestion] Extracted ${extractedPinouts.length} pinouts directly`);
+
+          // Also extract specs if not already present
+          if (Object.keys(partData.specs).length === 0) {
+            const extractedSpecs = await extractSpecsWithLLM(pdfData.text);
+            partData.specs = { ...partData.specs, ...extractedSpecs };
+          }
         }
       } catch (err) {
         console.warn(`[Ingestion] PDF extraction failed:`, err);
@@ -170,7 +213,7 @@ export async function importPartByMpn(
 
     // Step 5: Save component to database
     console.log(`[Ingestion] Saving component to database...`);
-    console.log(`[Ingestion] Package: raw="${partData.package_raw}" normalized="${partData.package_normalized}"`);
+    console.log(`[Ingestion] Package: raw="${partData.package_raw}" normalized="${partData.package_normalized}" source="${partData.package_source}"`);
     const component = await upsertComponent({
       mpn: partData.mpn,
       manufacturer_id: manufacturer.id,
@@ -179,6 +222,9 @@ export async function importPartByMpn(
       lifecycle_status: (partData.lifecycle_status || 'Unknown') as LifecycleStatus,
       package_raw: partData.package_raw,
       package_normalized: partData.package_normalized,
+      package_source: partData.package_source || null,
+      pinout_source: pinoutSource || null,
+      datasheet_cache_id: datasheetCacheId || null,
       specs: partData.specs,
       pin_count: pinCount,
       data_sources: result.dataSources as DataSource[],

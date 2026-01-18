@@ -42,6 +42,11 @@ export interface Component {
   data_sources: DataSource[];
   confidence_score: number;
 
+  // Source tracking (for datasheet caching)
+  package_source: 'api_params' | 'api_description' | 'datasheet' | 'manual' | null;
+  pinout_source: 'datasheet_cache' | 'direct_extraction' | 'manual' | null;
+  datasheet_cache_id: string | null;
+
   // Timestamps
   created_at: string;
   updated_at: string;
